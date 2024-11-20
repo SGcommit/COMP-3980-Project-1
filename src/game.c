@@ -1,44 +1,24 @@
-#include "../include/display.h"
+#include "../include/game.h"
 #include <stdio.h>
-#include <stdlib.h>
-#include <stdbool.h>
-#include <ncurses.h>
 
-// Structure for context
-typedef struct {
-    int socket;
-    int localx, localy;
-    int remotex, remotey;
-    bool active;
-    char dataSent[256];
-    char dataReceived[256];
-} Context;
-
-// Function prototypes
-void initializeGame();
-void setupNcurses();
-void initializeNetwork();
-void setStartingPositions();
-void handleInput();
-int getUserInput();
-void updateLocalDot(int ch);
-void sendPositionUpdate();
-void createPacket(int x, int y);
-void sendUDPMessage(const char* packet);
-void receivePositionUpdate();
-void receiveUDPMessage();
-void updateRemoteDot(const char* packet);
-void updateScreen();
-void clearScreen();
-void drawDot(int x, int y, char symbol);
-void cleanup();
-void errorMessage(const char* msg);
-
-// Main function
 int main() {
-    // Call initializeGame to set up the game
-    // Main game loop to handle input and update screen
-    // Call cleanup if the game is not active
+    // Initialize the game
+    initializeGame();
+
+    // Main game loop
+    while (true) {
+        handleInput();
+        updateScreen();
+
+        // Check if the game is active
+        // Break loop if the game is no longer active
+        // Example:
+        // if (!context.active) break;
+    }
+
+    // Cleanup before exiting
+    cleanup();
+
     return 0;
 }
 
@@ -114,5 +94,4 @@ void cleanup() {
 void errorMessage(const char* msg) {
     // Print error message and exit
 }
-
 

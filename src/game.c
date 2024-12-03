@@ -479,12 +479,12 @@ _Noreturn void usage(const char *program_name, int exit_code, const char *messag
     exit(exit_code);
 }
 
-// Function to generate random coordinates
-void generateRandomCoordinates(int *x, int *y)
-{
-    *x = rand() % GAME_GRID_SIZE;    // Random x between 0 and 99
-    *y = rand() % GAME_GRID_SIZE;    // Random y between 0 and 99
-}
+// // Function to generate random coordinates
+// void generateRandomCoordinates(int *x, int *y)
+// {
+//     *x = rand() % GAME_GRID_SIZE;    // Random x between 0 and 99
+//     *y = rand() % GAME_GRID_SIZE;    // Random y between 0 and 99
+// }
 
 // Set starting positions for both players
 void setStartingPositions(void)

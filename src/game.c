@@ -1,5 +1,24 @@
 #include "../include/game.h"
+#include <ncurses.h>
 #include <stdio.h>
+#include <stdnoreturn.h>
+#define SELECT_TIMEOUT_USEC 100000
+#define BUFFER_SIZE 1024
+#define GAME_GRID_SIZE 20
+#define TEN 10
+
+typedef struct
+{
+    int                     socket;
+    int                     hostx;
+    int                     hosty;
+    int                     clientx;
+    int                     clienty;
+    bool                    is_host;
+    struct sockaddr_storage peer_addr;
+    socklen_t               peer_addr_len;
+    char                    game_state[BUFFER_SIZE];
+} Context;
 
 static Context               context;          // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
 static volatile sig_atomic_t quit_flag = 0;    // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
@@ -9,91 +28,6 @@ void handle_signal(int signal)
 {
     (void)signal;
     quit_flag = 1;
-}
-
-// Sleeps for a delay of 3 seconds
-static void sleepForDelay(void)
-{
-    sleep(3);
-}
-// Main entry point of the program
-// Parses the command-line arguments, initializes the socket and game loop
-// Handles communication between host and client based on the mode (host or client)
-int main(int argc, char *argv[])
-{
-    struct sockaddr_storage addr;
-    socklen_t               addr_len = sizeof(addr);
-    int                     sockfd;
-    char                    buffer[BUFFER_SIZE];
-    const char             *ip_address = NULL;
-    char                   *port       = NULL;
-    uint32_t                randomSeed;
-
-    randomSeed = arc4random();
-    srand(randomSeed);
-
-    // Parse arguments
-    parse_arguments(argc, argv, &ip_address, &port);
-
-    // Initialize addr structure
-    memset(&addr, 0, sizeof(addr));    // Zero out the addr structure
-
-    // Create socket
-    sockfd = socket_create(AF_INET, SOCK_DGRAM, 0);
-
-    // Set up the connection
-    setupConnection(&sockfd, &addr, ip_address, port);
-
-    signal(SIGINT, handle_signal);    // Handle Ctrl+C to quit
-
-    while(!quit_flag)
-    {
-        ssize_t     bytes;
-        const char *packet = NULL;
-        int         x;
-        int         y;
-
-        if(context.is_host)
-        {
-            // Host waits for a packet before responding
-            bytes = receiveUDPMessage(sockfd, &addr, &addr_len, buffer, sizeof(buffer));
-            if(bytes > 0)
-            {
-                printf("Host received packet: %s\n", buffer);
-
-                // Generate random coordinates for the host
-                generateRandomCoordinates(&x, &y);
-                printf("Host sending coordinates: x = %d, y = %d\n", x, y);
-
-                // Respond to sender with coordinates
-                packet = createPacket(x, y, "response");
-                sendUDPMessage(sockfd, &addr, addr_len, packet);
-            }
-        }
-        else
-        {
-            // Client sends first
-            generateRandomCoordinates(&x, &y);
-            printf("Client sending coordinates: x = %d, y = %d\n", x, y);
-
-            packet = createPacket(x, y, "game_active");
-            sendUDPMessage(sockfd, &addr, addr_len, packet);
-
-            // Wait for server response
-            bytes = receiveUDPMessage(sockfd, &addr, &addr_len, buffer, sizeof(buffer));
-            if(bytes > 0)
-            {
-                printf("Client received packet: %s\n", buffer);
-            }
-        }
-
-        sleepForDelay();    // Delay before the next update
-    }
-
-    // Close the socket
-    printf("Exiting...\n");
-    socket_close(sockfd);
-    return 0;
 }
 
 // Sets up the connection between the host and client
@@ -113,6 +47,9 @@ int setupConnection(const int *sockfd, struct sockaddr_storage *addr, const char
         parsed_port     = parse_in_port_t("game", port);
         addr->ss_family = AF_INET;
         socket_bind(*sockfd, addr, parsed_port);
+
+        // Initialize peer address length to zero
+        context.peer_addr_len = 0;
     }
     else
     {
@@ -137,6 +74,10 @@ int setupConnection(const int *sockfd, struct sockaddr_storage *addr, const char
             fprintf(stderr, "Unsupported address family\n");
             exit(EXIT_FAILURE);
         }
+
+        // Store the host's address as the peer address
+        memcpy(&context.peer_addr, addr, sizeof(struct sockaddr_storage));
+        context.peer_addr_len = sizeof(struct sockaddr_storage);
     }
 
     return 0;
@@ -152,10 +93,20 @@ int setupConnection(const int *sockfd, struct sockaddr_storage *addr, const char
 //     setupNcurses();
 // }
 //
-// void setupNcurses()
-//{
-//     // Initialize ncurses for GUI
-// }
+void setupNcurses(void)
+{
+    initscr();
+    cbreak();
+    noecho();
+    keypad(stdscr, TRUE);
+    curs_set(0);
+    nodelay(stdscr, TRUE);
+    start_color();
+    init_pair(1, COLOR_RED, COLOR_BLACK);     // Host color
+    init_pair(2, COLOR_BLUE, COLOR_BLACK);    // Client color
+    clear();
+    refresh();
+}
 
 // Initializes the network connection with the provided IP address and port
 // Converts IP address to sockaddr_storage and binds the socket to the specified port for UDP communication
@@ -305,6 +256,7 @@ int socket_create(int domain, int type, int protocol)
 
     return sockfd;
 }
+
 // Binds the socket to the specified address and port
 void socket_bind(int sockfd, struct sockaddr_storage *addr, in_port_t port)
 {
@@ -401,11 +353,15 @@ ssize_t receiveUDPMessage(int sockfd, struct sockaddr_storage *source_addr, sock
     // Null-terminate the received data
     buffer[bytes_received] = '\0';
 
-    // Print and process the received message
-    printf("Received packet: %s\n", buffer);
+    // For the host, store the client's address after receiving the first message
+    if(context.is_host && context.peer_addr_len == 0 && addr_len != NULL && source_addr != NULL)
+    {
+        memcpy(&context.peer_addr, source_addr, *addr_len);
+        context.peer_addr_len = *addr_len;
+    }
 
-    // Example: Call a function to process the message
-    updateRemoteDot(buffer);
+    // Process the received message
+    handleReceivedPacket(buffer);
 
     return bytes_received;
 }
@@ -421,25 +377,94 @@ char *createPacket(int x, int y, const char *game_state)
 
 void handleReceivedPacket(const char *packet)
 {
-    printf("Processing packet: %s\n", packet);
     updateRemoteDot(packet);    // Example of how packet might be handled
 }
 
 void updateRemoteDot(const char *packet)
 {
-    char *endptr;
-    long  x = strtol(packet, &endptr, BASE_TEN);
+    char       *packet_copy;
+    const char *token;
+    char       *save_ptr;    // For strtok_r
+    char       *endptr;
+    long        x_long;
+    long        y_long;
+    int         x;
+    int         y;
+    char        game_state[BUFFER_SIZE];
 
-    if(*endptr == ',')
+    packet_copy = strdup(packet);
+    if(packet_copy == NULL)
     {
-        long y = strtol(endptr + 1, &endptr, BASE_TEN);
-        if(*endptr == '\0')
-        {
-            context.remotex = (int)x;
-            context.remotey = (int)y;
-            return;
-        }
+        perror("strdup");
+        return;
     }
+
+    // First token
+    token = strtok_r(packet_copy, ",|", &save_ptr);
+    if(token == NULL)
+    {
+        fprintf(stderr, "Invalid packet format: %s\n", packet);
+        free(packet_copy);
+        return;
+    }
+
+    x_long = strtol(token, &endptr, TEN);
+    if(*endptr != '\0')
+    {
+        fprintf(stderr, "Invalid X coordinate: %s\n", token);
+        free(packet_copy);
+        return;
+    }
+
+    // Second token
+    token = strtok_r(NULL, ",|", &save_ptr);
+    if(token == NULL)
+    {
+        fprintf(stderr, "Invalid packet format: %s\n", packet);
+        free(packet_copy);
+        return;
+    }
+
+    y_long = strtol(token, &endptr, TEN);
+    if(*endptr != '\0')
+    {
+        fprintf(stderr, "Invalid Y coordinate: %s\n", token);
+        free(packet_copy);
+        return;
+    }
+
+    // Third token
+    token = strtok_r(NULL, "|", &save_ptr);
+    if(token == NULL)
+    {
+        fprintf(stderr, "Invalid packet format: %s\n", packet);
+        free(packet_copy);
+        return;
+    }
+
+    strncpy(game_state, token, sizeof(game_state) - 1);
+    game_state[sizeof(game_state) - 1] = '\0';
+
+    x = (int)x_long;
+    y = (int)y_long;
+
+    if(context.is_host)
+    {
+        // We are the host, the remote player is the client
+        context.clientx = x;
+        context.clienty = y;
+
+        // After receiving the client's position, send our position back
+        sendPositionUpdate();
+    }
+    else
+    {
+        // We are the client, the remote player is the host
+        context.hostx = x;
+        context.hosty = y;
+    }
+
+    free(packet_copy);
 }
 
 // Utility function
@@ -461,58 +486,261 @@ void generateRandomCoordinates(int *x, int *y)
     *y = rand() % GAME_GRID_SIZE;    // Random y between 0 and 99
 }
 
-// void setStartingPositions()
-//{
-//     // Initialize starting positions for local and remote players
-// }
-//
-// void handleInput()
-//{
-//     // Process user input and update local position
-// }
-//
-// int getUserInput()
-//{
-//     // Read user input
-//     return 0;
-// }
-//
-// void updateLocalDot(int ch)
-//{
-//     // Update local dot's position based on input
-// }
-//
-// void sendPositionUpdate()
-//{
-//     // Send local position to the remote player
-// }
+// Set starting positions for both players
+void setStartingPositions(void)
+{
+    if(context.is_host)
+    {
+        context.hostx   = GAME_GRID_SIZE / 2;
+        context.hosty   = GAME_GRID_SIZE / 2;
+        context.clientx = -1;    // Unknown position
+        context.clienty = -1;
+    }
+    else
+    {
+        context.clientx = GAME_GRID_SIZE / 2;
+        context.clienty = GAME_GRID_SIZE / 2;
+        context.hostx   = -1;    // Unknown position
+        context.hosty   = -1;
+    }
+}
 
-// void receivePositionUpdate()
-//{
-//     // Receive position update from the remote player
-// }
-//
-// void updateScreen()
-//{
-//    // Refresh the screen to show updated positions
-//}
-//
-// void clearScreen()
-//{
-//    // Clear the screen
-//}
-//
-// void drawDot(int x, int y, char symbol)
-//{
-//    // Draw a dot at the given coordinates
-//}
-//
-// void cleanup()
-//{
-//    // Free resources and exit
-//}
-//
-// void errorMessage(const char *msg)
-//{
-//    // Print error message and exit
-//}
+// Clean up ncurses
+void cleanupNcurses(void)
+{
+    endwin();    // End ncurses mode
+}
+
+// Draws the dots as X's
+void drawDot(int x, int y, int color_pair)
+{
+    attron(COLOR_PAIR(color_pair));
+    mvaddch(y % LINES, x % COLS, 'X');
+    attroff(COLOR_PAIR(color_pair));
+}
+
+// Read user input
+int getUserInput(void)
+{
+    return getch();    // Non-blocking input
+}
+
+// Update local dot based on input
+void updateLocalDot(int ch)
+{
+    int *x;
+    int *y;
+    if(context.is_host)
+    {
+        x = &context.hostx;
+        y = &context.hosty;
+    }
+    else
+    {
+        x = &context.clientx;
+        y = &context.clienty;
+    }
+
+    switch(ch)
+    {
+        case KEY_UP:
+            *y = (*y - 1 + GAME_GRID_SIZE) % GAME_GRID_SIZE;
+            break;
+        case KEY_DOWN:
+            *y = (*y + 1) % GAME_GRID_SIZE;
+            break;
+        case KEY_LEFT:
+            *x = (*x - 1 + GAME_GRID_SIZE) % GAME_GRID_SIZE;
+            break;
+        case KEY_RIGHT:
+            *x = (*x + 1) % GAME_GRID_SIZE;
+            break;
+        default:
+            break;
+    }
+}
+
+// Clear the screen
+void clearScreen(void)
+{
+    clear();
+    refresh();
+}
+
+// Sends update of dot position
+void sendPositionUpdate(void)
+{
+    int         x;
+    int         y;
+    const char *packet;
+    if(context.is_host)
+    {
+        x = context.hostx;
+        y = context.hosty;
+    }
+    else
+    {
+        x = context.clientx;
+        y = context.clienty;
+    }
+    packet = createPacket(x, y, "update");
+
+    // Only send if we have a valid peer address
+    if(context.peer_addr_len > 0)
+    {
+        if(sendto(context.socket, packet, strlen(packet), 0, (struct sockaddr *)&context.peer_addr, context.peer_addr_len) == -1)
+        {
+            perror("Failed to send message");
+            // Handle error appropriately, possibly exit or set a flag
+        }
+    }
+}
+
+void updateScreen(void)
+{
+    clear();    // Clear the screen
+
+    // Draw the grid background
+    for(int y = 0; y < GAME_GRID_SIZE; ++y)
+    {
+        for(int x = 0; x < GAME_GRID_SIZE; ++x)
+        {
+            mvaddch(y, x, '.');    // Move to position (y, x) and add a dot
+        }
+    }
+
+    // Draw local player's dot
+    if(context.is_host)
+    {
+        drawDot(context.hostx, context.hosty, 1);    // Host dot
+    }
+    else
+    {
+        drawDot(context.clientx, context.clienty, 2);    // Client dot
+    }
+
+    // Draw remote player's dot if known
+    if(context.is_host && context.clientx >= 0 && context.clienty >= 0)
+    {
+        drawDot(context.clientx, context.clienty, 2);    // Client dot
+    }
+    else if(!context.is_host && context.hostx >= 0 && context.hosty >= 0)
+    {
+        drawDot(context.hostx, context.hosty, 1);    // Host dot
+    }
+
+    refresh();    // Refresh the screen to display changes
+}
+
+// Receives updates of dot position
+void receivePositionUpdate(void)
+{
+    char                    buffer[BUFFER_SIZE];
+    struct sockaddr_storage source_addr;
+    socklen_t               addr_len = sizeof(source_addr);
+
+    ssize_t bytes = receiveUDPMessage(context.socket, &source_addr, &addr_len, buffer, sizeof(buffer));
+    if(bytes > 0)
+    {
+        updateRemoteDot(buffer);
+        updateScreen();
+    }
+}
+
+// Update the screen to show both local and remote dots
+void handleInput(void)
+{
+    int ch = getch();
+    if(ch != ERR)
+    {
+        updateLocalDot(ch);
+        sendPositionUpdate();
+        updateScreen();
+    }
+}
+
+// Display an error message and exit
+_Noreturn void errorMessage(const char *msg)
+{
+    cleanupNcurses();
+    fprintf(stderr, "Error: %s\n", msg);
+    exit(EXIT_FAILURE);
+}
+
+// Main entry point of the program
+// Parses the command-line arguments, initializes the socket and game loop
+// Handles communication between host and client based on the mode (host or client)
+int main(int argc, char *argv[])
+{
+    struct sockaddr_storage addr;
+    socklen_t               addr_len = sizeof(addr);
+    int                     sockfd;
+    char                    buffer[BUFFER_SIZE];
+    const char             *ip_address = NULL;
+    char                   *port       = NULL;
+
+    uint32_t randomSeed = arc4random();
+    srand(randomSeed);
+
+    memset(&context, 0, sizeof(Context));
+    setupNcurses();
+
+    parse_arguments(argc, argv, &ip_address, &port);
+
+    sockfd         = socket_create(AF_INET, SOCK_DGRAM, 0);
+    context.socket = sockfd;
+
+    setupConnection(&sockfd, &addr, ip_address, port);
+
+    setStartingPositions();
+    sendPositionUpdate();
+    updateScreen();
+
+    signal(SIGINT, handle_signal);
+
+    while(!quit_flag)
+    {
+        int            activity;
+        int            max_fd;
+        fd_set         readfds;
+        struct timeval tv;
+
+        FD_ZERO(&readfds);
+        FD_SET(sockfd, &readfds);
+        FD_SET(STDIN_FILENO, &readfds);
+
+        tv.tv_sec  = 0;
+        tv.tv_usec = SELECT_TIMEOUT_USEC;
+
+        max_fd   = sockfd > STDIN_FILENO ? sockfd : STDIN_FILENO;
+        activity = select(max_fd + 1, &readfds, NULL, NULL, &tv);
+
+        if(activity > 0)
+        {
+            if(FD_ISSET(sockfd, &readfds))
+            {
+                ssize_t bytes = receiveUDPMessage(sockfd, &addr, &addr_len, buffer, sizeof(buffer));
+                if(bytes > 0)
+                {
+                    if(context.is_host && context.peer_addr_len == 0)
+                    {
+                        memcpy(&context.peer_addr, &addr, addr_len);
+                        context.peer_addr_len = addr_len;
+                    }
+                    updateRemoteDot(buffer);
+                    updateScreen();
+                }
+            }
+
+            if(FD_ISSET(STDIN_FILENO, &readfds))
+            {
+                handleInput();
+            }
+        }
+    }
+
+    cleanupNcurses();
+    socket_close(sockfd);
+    printf("Exiting...\n");
+    return 0;
+}

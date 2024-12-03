@@ -4,6 +4,7 @@
 #include <arpa/inet.h>
 #include <errno.h>
 #include <inttypes.h>
+#include <ncurses.h>
 #include <netinet/in.h>
 #include <signal.h>
 #include <stdbool.h>
@@ -23,19 +24,6 @@
 #define GAME_LOOP_COUNT 5
 #define DEFAULT_PORT 8080
 #define DEFAULT_IP "192.168.0.1"
-#define GAME_GRID_SIZE 100
-
-// Structure for context
-typedef struct
-{
-    int  socket;
-    int  localx, localy;
-    int  remotex, remotey;
-    bool active;
-    bool is_host;
-    char dataSent[PACKET_SIZE];
-    char dataReceived[PACKET_SIZE];
-} Context;
 
 // Function prototypes
 
@@ -64,18 +52,17 @@ void  handle_signal(int signal);
 // Utility
 _Noreturn void usage(const char *program_name, int exit_code, const char *message);
 void           generateRandomCoordinates(int *x, int *y);
-// void initializeGame();
-// void setupNcurses();
-// void setStartingPositions();
-// void handleInput();
-// int  getUserInput();
-// void updateLocalDot(int ch);
-// void sendPositionUpdate();
-// void receivePositionUpdate();
-// void updateScreen();
-// void clearScreen();
-// void drawDot(int x, int y, char symbol);
-// void cleanup();
-// void errorMessage(const char *msg);
+void           setupNcurses(void);
+void           cleanupNcurses(void);
+void           drawDot(int x, int y, int color_pair);
+void           updateScreen(void);
+void           setStartingPositions(void);
+void           handleInput(void);
+int            getUserInput(void);
+void           updateLocalDot(int ch);
+void           sendPositionUpdate(void);
+void           receivePositionUpdate(void);
+void           clearScreen(void);
+void           errorMessage(const char *msg);
 
 #endif    // GAME_H

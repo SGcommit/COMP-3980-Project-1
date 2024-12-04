@@ -83,16 +83,6 @@ int setupConnection(const int *sockfd, struct sockaddr_storage *addr, const char
     return 0;
 }
 
-// void initializeGame()
-//{
-//     const char *ip_address = "127.0.0.1";    // Replace with actual IP
-//     const char *port       = "12345";        // Replace with actual port
-//
-//     initializeNetwork(ip_address, port);
-//     setStartingPositions();
-//     setupNcurses();
-// }
-//
 void setupNcurses(void)
 {
     initscr();
@@ -106,28 +96,6 @@ void setupNcurses(void)
     init_pair(2, COLOR_BLUE, COLOR_BLACK);    // Client color
     clear();
     refresh();
-}
-
-// Initializes the network connection with the provided IP address and port
-// Converts IP address to sockaddr_storage and binds the socket to the specified port for UDP communication
-void initializeNetwork(const char *ip_address, const char *port)
-{
-    struct sockaddr_storage addr;
-    in_port_t               parsed_port;
-
-    // Parse and convert the port string
-    parsed_port = parse_in_port_t("game", port);
-
-    // Convert the provided IP address to sockaddr_storage
-    convert_address(ip_address, &addr);
-
-    // Create the UDP socket
-    context.socket = socket_create(addr.ss_family, SOCK_DGRAM, 0);
-
-    // Bind to the specified address and port
-    socket_bind(context.socket, &addr, parsed_port);
-
-    printf("Network initialized on %s:%s\n", ip_address, port);
 }
 
 // Parses the command-line arguments to extract the IP address and port

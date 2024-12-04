@@ -38,7 +38,6 @@ void convert_address(const char *address, struct sockaddr_storage *addr);
 int  socket_create(int domain, int type, int protocol);
 void socket_bind(int sockfd, struct sockaddr_storage *addr, in_port_t port);
 void socket_close(int sockfd);
-void initializeNetwork(const char *ip_address, const char *port);
 
 // Game communication
 void    sendUDPMessage(int sockfd, const struct sockaddr_storage *dest_addr, socklen_t addr_len, const char *message);

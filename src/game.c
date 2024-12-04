@@ -287,19 +287,6 @@ void socket_close(int sockfd)
     }
 }
 
-// UDP communication functions
-void sendUDPMessage(int sockfd, const struct sockaddr_storage *dest_addr, socklen_t addr_len, const char *message)
-{
-    if(sendto(sockfd, message, strlen(message), 0, (const struct sockaddr *)dest_addr, addr_len) == -1)
-    {
-        perror("Failed to send message");
-        exit(EXIT_FAILURE);
-    }
-}
-
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wunused-parameter"
-
 ssize_t receiveUDPMessage(int sockfd, struct sockaddr_storage *source_addr, socklen_t *addr_len, char *buffer, size_t buffer_size)
 {
     ssize_t bytes_received;
@@ -335,8 +322,6 @@ ssize_t receiveUDPMessage(int sockfd, struct sockaddr_storage *source_addr, sock
     return bytes_received;
 }
 
-#pragma GCC diagnostic pop
-
 char *createPacket(int x, int y, const char *game_state)
 {
     static char packet[BUFFER_SIZE];
@@ -353,7 +338,7 @@ void updateRemoteDot(const char *packet)
 {
     char       *packet_copy;
     const char *token;
-    char       *save_ptr;    // For strtok_r
+    char       *save_ptr;
     char       *endptr;
     long        x_long;
     long        y_long;
@@ -448,13 +433,6 @@ _Noreturn void usage(const char *program_name, int exit_code, const char *messag
     exit(exit_code);
 }
 
-// // Function to generate random coordinates
-// void generateRandomCoordinates(int *x, int *y)
-// {
-//     *x = rand() % GAME_GRID_SIZE;    // Random x between 0 and 99
-//     *y = rand() % GAME_GRID_SIZE;    // Random y between 0 and 99
-// }
-
 // Set starting positions for both players
 void setStartingPositions(void)
 {
@@ -474,7 +452,6 @@ void setStartingPositions(void)
     }
 }
 
-
 // Clean up ncurses
 void cleanupNcurses(void)
 {
@@ -487,12 +464,6 @@ void drawDot(int x, int y, int color_pair)
     attron(COLOR_PAIR(color_pair));
     mvaddch(y % LINES, x % COLS, 'X');
     attroff(COLOR_PAIR(color_pair));
-}
-
-// Read user input
-int getUserInput(void)
-{
-    return getch();    // Non-blocking input
 }
 
 // Update local dot based on input
@@ -515,27 +486,19 @@ void updateLocalDot(int ch)
     {
         case KEY_UP:
             *y = (*y - 1 + GAME_GRID_Y) % GAME_GRID_Y;
-        break;
+            break;
         case KEY_DOWN:
             *y = (*y + 1) % GAME_GRID_Y;
-        break;
+            break;
         case KEY_LEFT:
             *x = (*x - 1 + GAME_GRID_X) % GAME_GRID_X;
-        break;
+            break;
         case KEY_RIGHT:
             *x = (*x + 1) % GAME_GRID_X;
-        break;
+            break;
         default:
             break;
     }
-}
-
-
-// Clear the screen
-void clearScreen(void)
-{
-    clear();
-    refresh();
 }
 
 // Sends update of dot position
@@ -566,6 +529,7 @@ void sendPositionUpdate(void)
         }
     }
 }
+
 void updateScreen(void)
 {
     clear();    // Clear the screen
@@ -601,20 +565,6 @@ void updateScreen(void)
 
     refresh();    // Refresh the screen to display changes
 }
-// Receives updates of dot position
-void receivePositionUpdate(void)
-{
-    char                    buffer[BUFFER_SIZE];
-    struct sockaddr_storage source_addr;
-    socklen_t               addr_len = sizeof(source_addr);
-
-    ssize_t bytes = receiveUDPMessage(context.socket, &source_addr, &addr_len, buffer, sizeof(buffer));
-    if(bytes > 0)
-    {
-        updateRemoteDot(buffer);
-        updateScreen();
-    }
-}
 
 // Update the screen to show both local and remote dots
 void handleInput(void)
@@ -626,14 +576,6 @@ void handleInput(void)
         sendPositionUpdate();
         updateScreen();
     }
-}
-
-// Display an error message and exit
-_Noreturn void errorMessage(const char *msg)
-{
-    cleanupNcurses();
-    fprintf(stderr, "Error: %s\n", msg);
-    exit(EXIT_FAILURE);
 }
 
 // Main entry point of the program

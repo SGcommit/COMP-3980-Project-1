@@ -40,7 +40,6 @@ void socket_bind(int sockfd, struct sockaddr_storage *addr, in_port_t port);
 void socket_close(int sockfd);
 
 // Game communication
-void    sendUDPMessage(int sockfd, const struct sockaddr_storage *dest_addr, socklen_t addr_len, const char *message);
 ssize_t receiveUDPMessage(int sockfd, struct sockaddr_storage *source_addr, socklen_t *addr_len, char *buffer, size_t buffer_size);
 void    handleReceivedPacket(const char *packet);
 
@@ -48,20 +47,16 @@ void    handleReceivedPacket(const char *packet);
 char *createPacket(int x, int y, const char *game_state);
 void  updateRemoteDot(const char *packet);
 void  handle_signal(int signal);
+
 // Utility
 _Noreturn void usage(const char *program_name, int exit_code, const char *message);
-void           generateRandomCoordinates(int *x, int *y);
 void           setupNcurses(void);
 void           cleanupNcurses(void);
 void           drawDot(int x, int y, int color_pair);
 void           updateScreen(void);
 void           setStartingPositions(void);
 void           handleInput(void);
-int            getUserInput(void);
 void           updateLocalDot(int ch);
 void           sendPositionUpdate(void);
-void           receivePositionUpdate(void);
-void           clearScreen(void);
-void           errorMessage(const char *msg);
 
 #endif    // GAME_H

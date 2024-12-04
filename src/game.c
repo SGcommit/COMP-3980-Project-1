@@ -4,7 +4,8 @@
 #include <stdnoreturn.h>
 #define SELECT_TIMEOUT_USEC 100000
 #define BUFFER_SIZE 1024
-#define GAME_GRID_SIZE 20
+#define GAME_GRID_Y 20
+#define GAME_GRID_X 40
 #define TEN 10
 
 typedef struct
@@ -459,19 +460,20 @@ void setStartingPositions(void)
 {
     if(context.is_host)
     {
-        context.hostx   = GAME_GRID_SIZE / 2;
-        context.hosty   = GAME_GRID_SIZE / 2;
+        context.hostx   = GAME_GRID_X / 2;
+        context.hosty   = GAME_GRID_Y / 2;
         context.clientx = -1;    // Unknown position
         context.clienty = -1;
     }
     else
     {
-        context.clientx = GAME_GRID_SIZE / 2;
-        context.clienty = GAME_GRID_SIZE / 2;
+        context.clientx = GAME_GRID_X / 2;
+        context.clienty = GAME_GRID_Y / 2;
         context.hostx   = -1;    // Unknown position
         context.hosty   = -1;
     }
 }
+
 
 // Clean up ncurses
 void cleanupNcurses(void)
@@ -512,21 +514,22 @@ void updateLocalDot(int ch)
     switch(ch)
     {
         case KEY_UP:
-            *y = (*y - 1 + GAME_GRID_SIZE) % GAME_GRID_SIZE;
-            break;
+            *y = (*y - 1 + GAME_GRID_Y) % GAME_GRID_Y;
+        break;
         case KEY_DOWN:
-            *y = (*y + 1) % GAME_GRID_SIZE;
-            break;
+            *y = (*y + 1) % GAME_GRID_Y;
+        break;
         case KEY_LEFT:
-            *x = (*x - 1 + GAME_GRID_SIZE) % GAME_GRID_SIZE;
-            break;
+            *x = (*x - 1 + GAME_GRID_X) % GAME_GRID_X;
+        break;
         case KEY_RIGHT:
-            *x = (*x + 1) % GAME_GRID_SIZE;
-            break;
+            *x = (*x + 1) % GAME_GRID_X;
+        break;
         default:
             break;
     }
 }
+
 
 // Clear the screen
 void clearScreen(void)
@@ -563,15 +566,14 @@ void sendPositionUpdate(void)
         }
     }
 }
-
 void updateScreen(void)
 {
     clear();    // Clear the screen
 
     // Draw the grid background
-    for(int y = 0; y < GAME_GRID_SIZE; ++y)
+    for(int y = 0; y < GAME_GRID_Y; ++y)
     {
-        for(int x = 0; x < GAME_GRID_SIZE; ++x)
+        for(int x = 0; x < GAME_GRID_X; ++x)
         {
             mvaddch(y, x, '.');    // Move to position (y, x) and add a dot
         }
@@ -599,7 +601,6 @@ void updateScreen(void)
 
     refresh();    // Refresh the screen to display changes
 }
-
 // Receives updates of dot position
 void receivePositionUpdate(void)
 {

@@ -6,6 +6,7 @@
 #define BUFFER_SIZE 1024
 #define GAME_GRID_Y 20
 #define GAME_GRID_X 40
+#define START_OFFSET 5
 #define TEN 10
 
 typedef struct
@@ -444,14 +445,14 @@ void setStartingPositions(void)
 {
     if(context.is_host)
     {
-        context.hostx   = GAME_GRID_X / 2;
+        context.hostx   = (GAME_GRID_X / 2) - START_OFFSET;
         context.hosty   = GAME_GRID_Y / 2;
         context.clientx = -1;    // Unknown position
         context.clienty = -1;
     }
     else
     {
-        context.clientx = GAME_GRID_X / 2;
+        context.clientx = (GAME_GRID_X / 2) + START_OFFSET;
         context.clienty = GAME_GRID_Y / 2;
         context.hostx   = -1;    // Unknown position
         context.hosty   = -1;

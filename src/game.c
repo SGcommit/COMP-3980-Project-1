@@ -424,6 +424,12 @@ void updateRemoteDot(const char *packet)
 // Utility function
 _Noreturn void usage(const char *program_name, int exit_code, const char *message)
 {
+    // Check if ncurses is initialized and clean up if it is
+    if(isendwin() == FALSE)
+    {
+        endwin();
+    }
+
     if(message)
     {
         fprintf(stderr, "%s\n", message);
